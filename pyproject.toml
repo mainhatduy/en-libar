@@ -1,0 +1,104 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hello-world-app"
+version = "1.0.0"
+description = "A simple desktop application for Fedora with system tray support"
+readme = "docs/README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Hello World Team", email = "team@helloworld.app"}
+]
+maintainers = [
+    {name = "Hello World Team", email = "team@helloworld.app"}
+]
+keywords = ["desktop", "gtk", "fedora", "linux", "system-tray"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Desktop Environment",
+    "Topic :: System :: System Shells",
+]
+requires-python = ">=3.8"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-gtk",
+    "pytest-cov",
+    "black",
+    "flake8",
+    "mypy",
+    "isort",
+    "pre-commit",
+]
+docs = [
+    "sphinx",
+    "sphinx-rtd-theme",
+]
+
+[project.scripts]
+hello-world-app = "hello_world_app.main:main"
+
+[project.urls]
+Homepage = "https://github.com/your-username/hello-world-app"
+Repository = "https://github.com/your-username/hello-world-app"
+Documentation = "https://github.com/your-username/hello-world-app/blob/main/docs/README.md"
+"Bug Reports" = "https://github.com/your-username/hello-world-app/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --strict-markers"
+testpaths = [
+    "tests",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+] 

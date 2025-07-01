@@ -1,0 +1,34 @@
+# Include documentation
+include docs/README.md
+include docs/INSTALL.md
+include docs/DEVELOPMENT.md
+
+# Include license and other root files
+include LICENSE
+include setup.cfg
+include pyproject.toml
+include requirements*.txt
+
+# Include assets
+recursive-include assets *
+recursive-include src/hello_world_app *.py
+
+# Include scripts
+recursive-include scripts *.sh
+
+# Include tests
+recursive-include tests *.py
+
+# Exclude unwanted files
+exclude *.pyc
+exclude *.pyo
+exclude *.pyd
+exclude __pycache__
+exclude .DS_Store
+exclude .git*
+exclude .pytest_cache
+exclude .mypy_cache
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * .DS_Store
+recursive-exclude * .git* 

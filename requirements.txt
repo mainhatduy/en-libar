@@ -1,0 +1,16 @@
+# Dependencies cho Hello World Desktop App trên Fedora
+# Các package này cần được cài đặt qua DNF package manager
+
+# GTK và PyGObject dependencies (cài qua DNF):
+# sudo dnf install python3-gobject gtk3-devel
+# sudo dnf install libappindicator-gtk3-devel
+# sudo dnf install dbus-python python3-dbus-devel
+
+# Python packages (nếu cần):
+# Global hotkey support
+pynput>=1.7.6 
+# D-Bus support (được cài đặt kèm với dbus-python)
+# dbus-python
+
+# Công cụ window management (cho xdotool)
+# sudo dnf install xdotool 

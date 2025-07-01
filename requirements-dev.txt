@@ -1,0 +1,25 @@
+# Development dependencies cho Hello World Desktop App
+
+# Testing
+pytest>=6.0
+pytest-gtk
+pytest-cov
+
+# Code Quality
+black
+flake8
+mypy
+isort
+
+# Documentation
+sphinx
+sphinx-rtd-theme
+
+# Build tools
+build
+twine
+wheel
+
+# Development utilities
+pre-commit
+tox 

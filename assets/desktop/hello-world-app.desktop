@@ -1,0 +1,22 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Hello World App
+Name[vi]=Ứng dụng Hello World
+Comment=A simple desktop application for Fedora with system tray support
+Comment[vi]=Ứng dụng desktop đơn giản cho Fedora với hỗ trợ system tray
+Exec=hello-world-app
+Icon=applications-system
+Terminal=false
+Categories=Utility;GTK;
+Keywords=hello;world;demo;python;gtk;
+StartupNotify=true
+StartupWMClass=Hello World - Fedora App
+
+# Để cài đặt file này:
+# 1. Copy file này vào ~/.local/share/applications/
+# 2. Hoặc copy vào /usr/share/applications/ (cần sudo)
+# 3. Chạy: update-desktop-database ~/.local/share/applications/
+# 
+# Lưu ý: Đảm bảo đã cài đặt package bằng 'pip install -e .' 
+# để command 'hello-world-app' có sẵn trong PATH 
