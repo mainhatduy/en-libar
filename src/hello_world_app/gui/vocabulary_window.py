@@ -413,11 +413,15 @@ class VocabularyWindow:
     def _on_list_button_press(self, widget, event):
         """Xử lý khi click chuột vào list"""
         if event.button == 3:  # Right click
+            log_message("Right-click detected on vocabulary list")
             path_info = widget.get_path_at_pos(int(event.x), int(event.y))
             if path_info:
                 path = path_info[0]
+                log_message(f"Right-click on path: {path}")
                 widget.get_selection().select_path(path)
                 self._show_context_menu(event, path)
+            else:
+                log_message("Right-click but no path info found")
     
     def _show_context_menu(self, event, path):
         """Hiển thị context menu"""
@@ -450,30 +454,52 @@ class VocabularyWindow:
     
     def _delete_vocabulary_from_path(self, path):
         """Xóa từ vựng từ path"""
-        model = self.vocabulary_list.get_model()
-        iter = model.get_iter(path)
-        vocab_id = model.get_value(iter, 6)
-        word = model.get_value(iter, 0)
-        
-        # Confirm dialog
-        dialog = Gtk.MessageDialog(
-            transient_for=self.window,
-            flags=0,
-            message_type=Gtk.MessageType.QUESTION,
-            buttons=Gtk.ButtonsType.YES_NO,
-            text=f"Bạn có chắc muốn xóa từ '{word}'?"
-        )
-        
-        response = dialog.run()
-        if response == Gtk.ResponseType.YES:
-            if self.vocab_manager.delete_vocabulary(vocab_id):
-                self._show_message(f"Đã xóa từ '{word}' thành công!", "success")
-                self.refresh_vocabulary_list()
-                self._update_stats()
+        try:
+            model = self.vocabulary_list.get_model()
+            iter = model.get_iter(path)
+            vocab_id = model.get_value(iter, 6)
+            word = model.get_value(iter, 0)
+            
+            # Debug logging
+            log_message(f"Attempting to delete vocabulary - ID: {vocab_id}, Word: '{word}'")
+            
+            # Validate that we have a valid vocab_id
+            if not vocab_id or not isinstance(vocab_id, int) or vocab_id <= 0:
+                log_message(f"ERROR: Invalid vocab_id: {vocab_id} (type: {type(vocab_id)})")
+                self._show_message("Lỗi: ID từ vựng không hợp lệ!", "error")
+                return
+            
+            # Confirm dialog
+            dialog = Gtk.MessageDialog(
+                transient_for=self.window,
+                flags=0,
+                message_type=Gtk.MessageType.QUESTION,
+                buttons=Gtk.ButtonsType.YES_NO,
+                text=f"Bạn có chắc muốn xóa từ '{word}'?"
+            )
+            
+            response = dialog.run()
+            if response == Gtk.ResponseType.YES:
+                log_message(f"User confirmed deletion of vocab ID: {vocab_id}")
+                
+                delete_result = self.vocab_manager.delete_vocabulary(vocab_id)
+                log_message(f"Delete operation result: {delete_result}")
+                
+                if delete_result:
+                    self.refresh_vocabulary_list()
+                    self._update_stats()
+                    log_message(f"Successfully deleted vocabulary: {word}")
+                else:
+                    self._show_message("Lỗi khi xóa từ vựng!", "error")
+                    log_message(f"Failed to delete vocabulary: {word}")
             else:
-                self._show_message("Lỗi khi xóa từ vựng!", "error")
-        
-        dialog.destroy()
+                log_message("User cancelled deletion")
+            
+            dialog.destroy()
+            
+        except Exception as e:
+            log_message(f"ERROR in _delete_vocabulary_from_path: {e}")
+            self._show_message(f"Lỗi xóa từ vựng: {str(e)}", "error")
     
     def _mark_reviewed_from_path(self, path):
         """Đánh dấu đã ôn từ path"""
@@ -556,6 +582,22 @@ class VocabularyWindow:
             # Format ngày tạo
             created_at = vocab['created_at'][:10] if vocab['created_at'] else ""
             
+            # Validate vocab ID
+            vocab_id = vocab.get('id')
+            if vocab_id is None:
+                log_message(f"WARNING: Missing ID for vocabulary: {vocab.get('word', 'unknown')}")
+                continue
+                
+            try:
+                vocab_id = int(vocab_id)
+            except (ValueError, TypeError):
+                log_message(f"ERROR: Invalid ID type for vocabulary {vocab.get('word', 'unknown')}: {vocab_id} (type: {type(vocab_id)})")
+                continue
+            
+            if vocab_id <= 0:
+                log_message(f"ERROR: Invalid ID value for vocabulary {vocab.get('word', 'unknown')}: {vocab_id}")
+                continue
+            
             self.list_store.append([
                 vocab['word'] or "",
                 vocab['pronunciation'] or "",
@@ -563,8 +605,10 @@ class VocabularyWindow:
                 vocab['definition'] or "",
                 vocab['example'] or "",
                 created_at,
-                int(vocab['id'])  # Cột ẩn chứa ID (đảm bảo là int)
+                vocab_id  # Cột ẩn chứa ID (đã validate)
             ])
+            
+        log_message(f"Populated list with {len(vocabularies)} vocabularies")
     
     def _update_stats(self):
         """Cập nhật thống kê"""
@@ -612,6 +656,16 @@ class VocabularyWindow:
             self._on_refresh_clicked(None)
             return True
         
+        # Delete key để xóa từ vựng đã chọn
+        if event.keyval == Gdk.KEY_Delete:
+            selection = self.vocabulary_list.get_selection()
+            model, iter = selection.get_selected()
+            if iter:
+                path = model.get_path(iter)
+                log_message(f"Delete key pressed, deleting item at path: {path}")
+                self._delete_vocabulary_from_path(path)
+                return True
+        
         # Escape để hủy edit
         if event.keyval == Gdk.KEY_Escape and self.current_editing_id is not None:
             self._cancel_edit_mode()
@@ -621,13 +675,17 @@ class VocabularyWindow:
     
     def refresh_vocabulary_list(self):
         """Làm mới danh sách từ vựng"""
+        log_message("Refreshing vocabulary list...")
         search_text = self.search_entry.get_text().strip() if self.search_entry else ""
         
         if search_text:
+            log_message(f"Searching vocabularies with term: '{search_text}'")
             vocabularies = self.vocab_manager.search_vocabulary(search_text)
         else:
+            log_message("Getting all vocabularies")
             vocabularies = self.vocab_manager.get_all_vocabulary()
         
+        log_message(f"Retrieved {len(vocabularies)} vocabularies from database")
         self._populate_list(vocabularies)
     
     def show(self):
