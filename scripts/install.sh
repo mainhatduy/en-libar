@@ -48,6 +48,10 @@ cd "$(dirname "$0")/.."
 echo "📦 Cài đặt Hello World App package..."
 pip3 install --user -e .
 
+# Cài đặt AI dependencies
+echo "🤖 Cài đặt AI dependencies..."
+pip3 install --user google-genai
+
 # Cài đặt desktop file (tùy chọn)
 echo "🖥️  Cài đặt desktop entry..."
 mkdir -p ~/.local/share/applications/
@@ -67,6 +71,11 @@ echo "🎯 Để chạy ứng dụng:"
 echo "   hello-world-app"
 echo "   hoặc từ menu ứng dụng: 'Hello World App'"
 echo "   hoặc sử dụng phím tắt Super+T (Windows+T)"
+echo ""
+echo "🤖 Để sử dụng tính năng AI sinh nghĩa:"
+echo "   1. Lấy API key tại: https://makersuite.google.com/app/apikey"
+echo "   2. Thêm vào ~/.bashrc: export GEMINI_API_KEY='your_api_key_here'"
+echo "   3. Chạy: source ~/.bashrc"
 echo ""
 echo "📖 Đọc docs/README.md để biết thêm thông tin chi tiết"
 echo ""

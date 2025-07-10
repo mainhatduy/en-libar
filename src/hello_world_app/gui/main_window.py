@@ -9,6 +9,7 @@ from gi.repository import Gtk, Gdk, GLib
 from ..core.config import AppConfig
 from ..core.vocabulary_manager import VocabularyManager
 from ..utils.helpers import format_system_info, log_message
+from ..utils.ai_helper import ai_helper
 from .vocabulary_window import VocabularyWindow
 
 class MainWindow:
@@ -24,6 +25,8 @@ class MainWindow:
         self.word_entry = None
         self.definition_entry = None
         self.quick_add_status_label = None
+        self.ai_button = None
+        self.ai_status_label = None
         
         self.setup_ui()
     
@@ -123,6 +126,15 @@ class MainWindow:
         add_button.get_style_context().add_class("suggested-action")
         button_hbox.pack_start(add_button, False, False, 0)
         
+        # Nút AI sinh nghĩa
+        self.ai_button = Gtk.Button(label="🤖 AI sinh nghĩa")
+        self.ai_button.connect("clicked", self._on_ai_generate_definition)
+        if ai_helper.is_available():
+            self.ai_button.get_style_context().add_class("suggested-action")
+        else:
+            self.ai_button.set_sensitive(False)
+        button_hbox.pack_start(self.ai_button, False, False, 0)
+        
         clear_button = Gtk.Button(label="🗑️ Xóa")
         clear_button.connect("clicked", self._on_clear_quick_form)
         button_hbox.pack_start(clear_button, False, False, 0)
@@ -134,14 +146,34 @@ class MainWindow:
         self.quick_add_status_label.set_halign(Gtk.Align.START)
         form_vbox.pack_start(self.quick_add_status_label, False, False, 0)
         
+        # AI status label
+        self.ai_status_label = Gtk.Label()
+        self.ai_status_label.set_halign(Gtk.Align.START)
+        ai_status_text = ai_helper.get_setup_instructions()
+        if ai_helper.is_available():
+            self.ai_status_label.set_markup('<span size="small" color="green">✅ AI đã sẵn sàng!</span>')
+        else:
+            self.ai_status_label.set_markup('<span size="small" color="orange">⚠️ AI chưa sẵn sàng - xem hướng dẫn bên dưới</span>')
+        form_vbox.pack_start(self.ai_status_label, False, False, 0)
+        
         form_frame.add(form_vbox)
         section_vbox.pack_start(form_frame, False, False, 0)
         
         # Instructions
         instruction_label = Gtk.Label()
-        instruction_label.set_markup('<span size="small" style="italic" color="gray">💡 Mẹo: Nhấn Enter để thêm nhanh, hoặc Ctrl+M để mở quản lý từ vựng đầy đủ</span>')
+        instruction_label.set_markup('<span size="small" style="italic" color="gray">💡 Mẹo: Nhấn Enter để thêm nhanh, nút 🤖 để AI sinh nghĩa, hoặc Ctrl+M để mở quản lý từ vựng đầy đủ</span>')
         instruction_label.set_halign(Gtk.Align.START)
         section_vbox.pack_start(instruction_label, False, False, 0)
+        
+        # AI setup instructions (nếu cần)
+        if not ai_helper.is_available():
+            ai_setup_label = Gtk.Label()
+            setup_text = ai_helper.get_setup_instructions()
+            ai_setup_label.set_markup(f'<span size="small" color="orange">{setup_text}</span>')
+            ai_setup_label.set_halign(Gtk.Align.START)
+            ai_setup_label.set_line_wrap(True)
+            ai_setup_label.set_max_width_chars(80)
+            section_vbox.pack_start(ai_setup_label, False, False, 0)
         
         return section_vbox
     
@@ -234,18 +266,84 @@ class MainWindow:
             markup = f'<span color="green">{message}</span>'
         elif status_type == "error":
             markup = f'<span color="red">{message}</span>'
+        elif status_type == "info":
+            markup = f'<span color="blue">{message}</span>'
         else:
             markup = message
         
         self.quick_add_status_label.set_markup(markup)
         
-        # Tự động xóa thông báo sau 3 giây
-        if message:
+        # Tự động xóa thông báo sau 3 giây (trừ khi đang loading)
+        if message and "Đang sinh nghĩa" not in message:
             GLib.timeout_add_seconds(3, lambda: self._update_status("", ""))
     
     def _on_hide_clicked(self, widget):
         """Xử lý khi click nút ẩn"""
         self.hide()
+    
+    def _on_ai_generate_definition(self, widget):
+        """Xử lý khi click nút AI sinh nghĩa"""
+        if not ai_helper.is_available():
+            self._update_status("❌ AI chưa sẵn sàng! Vui lòng kiểm tra thiết lập.", "error")
+            return
+        
+        if not self.word_entry:
+            return
+            
+        word = self.word_entry.get_text().strip()
+        if not word:
+            self._update_status("❌ Vui lòng nhập từ vựng trước!", "error")
+            return
+        
+        # Disable nút AI và hiển thị trạng thái loading
+        if self.ai_button:
+            self.ai_button.set_sensitive(False)
+            self.ai_button.set_label("⏳ Đang sinh nghĩa...")
+        
+        self._update_status("🤖 AI đang sinh nghĩa...", "info")
+        
+        # Sử dụng GLib.idle_add để tránh block UI
+        def generate_in_background():
+            try:
+                definition = ai_helper.generate_definition(word)
+                
+                # Cập nhật UI trong main thread
+                GLib.idle_add(self._on_ai_generation_complete, definition, word)
+                
+            except Exception as e:
+                log_message(f"ERROR: Lỗi trong background AI generation: {e}")
+                GLib.idle_add(self._on_ai_generation_complete, None, word)
+        
+        # Chạy AI generation trong background thread
+        import threading
+        thread = threading.Thread(target=generate_in_background)
+        thread.daemon = True
+        thread.start()
+    
+    def _on_ai_generation_complete(self, definition, word):
+        """Xử lý khi AI hoàn thành sinh nghĩa"""
+        # Restore nút AI
+        if self.ai_button:
+            self.ai_button.set_sensitive(True)
+            self.ai_button.set_label("🤖 AI sinh nghĩa")
+        
+        if definition:
+            # Điền nghĩa vào definition entry
+            if self.definition_entry:
+                self.definition_entry.set_text(definition)
+            
+            self._update_status(f"✅ AI đã sinh nghĩa cho '{word}' thành công!", "success")
+            
+            # Focus vào definition entry để user có thể chỉnh sửa
+            if self.definition_entry:
+                self.definition_entry.grab_focus()
+                # Di chuyển cursor đến cuối text
+                self.definition_entry.set_position(-1)
+                
+        else:
+            self._update_status(f"❌ Không thể sinh nghĩa cho '{word}'. Vui lòng thử lại hoặc nhập thủ công.", "error")
+        
+        return False  # Chỉ chạy một lần
     
     def _on_vocabulary_clicked(self, widget):
         """Xử lý khi click nút từ vựng"""

@@ -12,5 +12,8 @@ pynput>=1.7.6
 # D-Bus support (được cài đặt kèm với dbus-python)
 # dbus-python
 
+# AI dependencies
+google-genai>=0.8.0
+
 # Công cụ window management (cho xdotool)
 # sudo dnf install xdotool 
