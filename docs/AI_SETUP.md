@@ -1,8 +1,15 @@
-# Hướng dẫn thiết lập AI sinh nghĩa
+# Hướng dẫn thiết lập AI sinh dữ liệu từ vựng đầy đủ
 
 ## Tổng quan
 
-Ứng dụng Hello World App hỗ trợ tính năng AI tự động sinh nghĩa cho từ vựng sử dụng Google Gemini API. Tính năng này giúp bạn nhanh chóng có được nghĩa tiếng Việt của từ tiếng Anh mà không cần tra cứu thủ công.
+Ứng dụng Hello World App hỗ trợ tính năng AI tự động sinh **dữ liệu từ vựng đầy đủ** sử dụng Google Gemini API. Tính năng này không chỉ sinh nghĩa tiếng Việt mà còn cung cấp:
+
+- **Nghĩa tiếng Việt**: Nghĩa chính xác và phổ biến nhất
+- **Loại từ**: Danh từ, động từ, tính từ, trạng từ...
+- **Phát âm**: Ký hiệu IPA hoặc phiên âm đơn giản
+- **Ngữ cảnh sử dụng**: Ít nhất 2 câu ví dụ thực tế
+- **Từ đồng nghĩa**: Danh sách các từ có nghĩa tương tự
+- **Từ trái nghĩa**: Danh sách các từ có nghĩa đối lập
 
 ## Cài đặt
 
@@ -50,7 +57,24 @@ GEMINI_API_KEY=your_api_key_here
 
 ## Sử dụng
 
-### Trong giao diện chính
+### Tính năng mới: AI sinh dữ liệu đầy đủ
+
+#### Trong giao diện chế độ quản lý đầy đủ:
+
+1. Nhập từ vựng vào ô "Từ vựng"
+2. Nhấn nút **"🤖 AI sinh dữ liệu đầy đủ"**
+3. Chờ AI sinh dữ liệu (thường mất 3-5 giây)
+4. Tất cả các trường sẽ được điền tự động:
+   - Nghĩa tiếng Việt
+   - Loại từ
+   - Phát âm
+   - Ngữ cảnh sử dụng
+   - Từ đồng nghĩa
+   - Từ trái nghĩa
+5. Bạn có thể chỉnh sửa bất kỳ trường nào trước khi lưu
+6. Nhấn **"💾 Lưu từ vựng"** để lưu vào database
+
+#### Trong giao diện chính (tương thích ngược):
 
 1. Nhập từ vựng vào ô "Từ vựng"
 2. Nhấn nút "🤖 AI sinh nghĩa"
@@ -58,10 +82,43 @@ GEMINI_API_KEY=your_api_key_here
 4. Nghĩa sẽ tự động điền vào ô "Nghĩa"
 5. Bạn có thể chỉnh sửa nghĩa trước khi thêm vào từ điển
 
+### Ví dụ kết quả AI sinh cho từ "beautiful":
+
+```
+📝 Nghĩa tiếng Việt: đẹp, xinh đẹp
+📚 Loại từ: adjective
+🔊 Phát âm: /ˈbjuːtɪfəl/
+💬 Ngữ cảnh sử dụng:
+   • She wore a beautiful dress to the party.
+   • The sunset was beautiful tonight.
+🔄 Từ đồng nghĩa: gorgeous, lovely, attractive, pretty
+🔀 Từ trái nghĩa: ugly, hideous, unattractive
+```
+
 ### Trạng thái AI
 
 - **✅ AI đã sẵn sàng**: AI hoạt động bình thường
 - **⚠️ AI chưa sẵn sàng**: Cần thiết lập API key hoặc cài đặt dependencies
+
+## Test tính năng
+
+### Chạy script test:
+
+```bash
+python scripts/test_ai_comprehensive.py
+```
+
+Script này sẽ:
+- Kiểm tra AI có sẵn sàng không
+- Test sinh dữ liệu cho 5 từ mẫu
+- Lưu kết quả vào database
+- Hiển thị thống kê
+
+### Xem database:
+
+```bash
+sqlite3 ~/.local/share/hello-world-app/vocabulary.db "SELECT word, definition, synonyms, antonyms FROM vocabulary LIMIT 5;"
+```
 
 ## Troubleshooting
 
@@ -73,52 +130,80 @@ GEMINI_API_KEY=your_api_key_here
 1. Cài đặt: `pip install google-genai`
 2. Thiết lập GEMINI_API_KEY theo hướng dẫn trên
 
-### Lỗi "Không thể sinh nghĩa"
+### Lỗi "Không thể sinh dữ liệu"
 
 **Nguyên nhân**: API key không hợp lệ, mạng có vấn đề, hoặc từ không được AI nhận diện
 
 **Giải pháp**:
-1. Kiểm tra kết nối mạng
-2. Kiểm tra API key còn hạn sử dụng
+1. Kiểm tra API key có hợp lệ
+2. Kiểm tra kết nối mạng
 3. Thử lại với từ khác
-4. Nhập nghĩa thủ công
+4. Nhập dữ liệu thủ công nếu cần
 
-### API Rate Limit
+### Lỗi timeout hoặc chậm
 
-Google Gemini có giới hạn số request miễn phí. Nếu vượt quá:
-- Chờ ít phút rồi thử lại
-- Xem xét nâng cấp gói API nếu cần sử dụng nhiều
+**Nguyên nhân**: API Gemini đang chậm hoặc quá tải
+
+**Giải pháp**:
+1. Đợi và thử lại
+2. Kiểm tra kết nối mạng
+3. Sử dụng tính năng "AI sinh nghĩa" đơn giản thay vì sinh dữ liệu đầy đủ
+
+### Database schema cũ
+
+Nếu bạn đã sử dụng phiên bản cũ, database sẽ tự động được cập nhật với các cột mới:
+- `context_sentences`
+- `synonyms` 
+- `antonyms`
+
+Không cần làm gì thêm, hệ thống sẽ tự động migration.
 
 ## Tính năng nâng cao
 
-### Tùy chỉnh prompt
+### API Response Schema
 
-Bạn có thể tùy chỉnh cách AI sinh nghĩa bằng cách chỉnh sửa file `src/hello_world_app/utils/ai_helper.py`, method `_create_definition_prompt()`.
+AI trả về dữ liệu theo format JSON:
 
-### Sử dụng model khác
-
-Mặc định sử dụng `gemini-2.0-flash-exp`. Bạn có thể thay đổi trong `ai_helper.py`:
-
-```python
-self.model = "gemini-1.5-pro"  # Hoặc model khác
+```json
+{
+  "vietnamese_meaning": "đẹp, xinh đẹp",
+  "word_type": "adjective", 
+  "pronunciation": "/ˈbjuːtɪfəl/",
+  "context_sentences": [
+    "She wore a beautiful dress to the party.",
+    "The sunset was beautiful tonight."
+  ],
+  "synonyms": ["gorgeous", "lovely", "attractive", "pretty"],
+  "antonyms": ["ugly", "hideous", "unattractive"]
+}
 ```
 
-## Bảo mật
+### Tùy chỉnh Prompt
 
-- **Không chia sẻ API key**: Giữ API key bí mật
-- **Không commit API key**: Không đưa API key vào git
-- **Sử dụng environment variables**: Luôn sử dụng biến môi trường
+Bạn có thể tùy chỉnh prompt trong file `src/hello_world_app/utils/ai_helper.py` tại method `_create_comprehensive_prompt()`.
 
-## Hỗ trợ
+### Database Schema
 
-Nếu gặp vấn đề:
-1. Kiểm tra log trong terminal khi chạy ứng dụng
-2. Đọc thông báo lỗi trong giao diện
-3. Tham khảo documentation của Google Gemini API
+Bảng `vocabulary` hiện có các cột:
 
-## Giới hạn
+- `id`: ID tự động tăng
+- `word`: Từ vựng
+- `definition`: Nghĩa tiếng Việt  
+- `example`: Ví dụ đơn giản
+- `pronunciation`: Phát âm
+- `part_of_speech`: Loại từ
+- `context_sentences`: Ngữ cảnh sử dụng (mới)
+- `synonyms`: Từ đồng nghĩa (mới)
+- `antonyms`: Từ trái nghĩa (mới)
+- `created_at`: Thời gian tạo
+- `last_reviewed`: Lần ôn tập cuối
+- `review_count`: Số lần ôn tập
 
-- Hiện tại chỉ hỗ trợ từ tiếng Anh → tiếng Việt
-- Cần kết nối internet
-- Phụ thuộc vào chất lượng của Gemini API
-- Có thể không chính xác 100% với thuật ngữ chuyên môn 
+## Support
+
+Nếu gặp vấn đề, hãy:
+
+1. Kiểm tra log trong terminal
+2. Chạy script test để debug
+3. Kiểm tra thiết lập API key
+4. Báo cáo lỗi kèm log chi tiết 

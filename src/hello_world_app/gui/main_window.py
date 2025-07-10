@@ -6,11 +6,14 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk, GLib
 from typing import Optional, Dict
+import threading
 
 from ..core.config import AppConfig
 from ..core.vocabulary_manager import VocabularyManager
+from ..gui.settings_window import SettingsWindow
 from ..utils.helpers import format_system_info, log_message
 from ..utils.ai_helper import ai_helper
+from ..core.config_manager import config_manager
 
 class MainWindow:
     """Quản lý cửa sổ chính của ứng dụng"""
@@ -32,6 +35,14 @@ class MainWindow:
         self.ai_button = None
         self.ai_status_label = None
         
+        # Quick add advanced widgets (when enabled)
+        self.quick_pronunciation_entry = None
+        self.quick_part_of_speech_combo = None
+        self.quick_example_textview = None
+        self.quick_context_sentences_textview = None
+        self.quick_synonyms_entry = None
+        self.quick_antonyms_entry = None
+        
         # Full management widgets
         self.vocabulary_list = None
         self.search_entry = None
@@ -40,6 +51,9 @@ class MainWindow:
         self.example_textview = None
         self.pronunciation_entry = None
         self.part_of_speech_combo = None
+        self.context_sentences_textview = None
+        self.synonyms_entry = None
+        self.antonyms_entry = None
         self.current_editing_id = None
         self.save_button = None
         self.cancel_button = None
@@ -98,6 +112,12 @@ class MainWindow:
         mode_button.connect("clicked", self._on_mode_switch_clicked)
         header.pack_start(mode_button)
         self.mode_button = mode_button
+        
+        # Nút Settings
+        settings_button = Gtk.Button()
+        settings_button.set_label("⚙️ Cấu hình")
+        settings_button.connect("clicked", self._on_settings_clicked)
+        header.pack_end(settings_button)
         
         if self.window:
             self.window.set_titlebar(header)
@@ -170,10 +190,20 @@ class MainWindow:
         section_vbox = Gtk.VBox(spacing=10)
         
         # Tiêu đề
+        title_hbox = Gtk.HBox(spacing=10)
         title_label = Gtk.Label()
         title_label.set_markup('<span size="large" weight="bold">📝 Thêm từ vựng nhanh</span>')
         title_label.set_halign(Gtk.Align.START)
-        section_vbox.pack_start(title_label, False, False, 0)
+        title_hbox.pack_start(title_label, False, False, 0)
+        
+        # Nút toggle advanced fields
+        show_advanced = config_manager.get_ui_setting('show_advanced_fields', False)
+        toggle_button = Gtk.ToggleButton(label="📋 Trường nâng cao")
+        toggle_button.set_active(show_advanced)
+        toggle_button.connect("toggled", self._on_toggle_advanced_fields)
+        title_hbox.pack_end(toggle_button, False, False, 0)
+        
+        section_vbox.pack_start(title_hbox, False, False, 0)
         
         # Form container
         form_frame = Gtk.Frame()
@@ -188,7 +218,7 @@ class MainWindow:
         # Word entry
         word_hbox = Gtk.HBox(spacing=10)
         word_label = Gtk.Label("Từ vựng:")
-        word_label.set_size_request(80, -1)
+        word_label.set_size_request(120, -1)
         word_label.set_halign(Gtk.Align.START)
         self.word_entry = Gtk.Entry()
         self.word_entry.set_placeholder_text("Nhập từ vựng...")
@@ -200,7 +230,7 @@ class MainWindow:
         # Definition entry
         def_hbox = Gtk.HBox(spacing=10)
         def_label = Gtk.Label("Nghĩa:")
-        def_label.set_size_request(80, -1)
+        def_label.set_size_request(120, -1)
         def_label.set_halign(Gtk.Align.START)
         self.definition_entry = Gtk.Entry()
         self.definition_entry.set_placeholder_text("Nhập nghĩa của từ...")
@@ -208,6 +238,100 @@ class MainWindow:
         def_hbox.pack_start(def_label, False, False, 0)
         def_hbox.pack_start(self.definition_entry, True, True, 0)
         form_vbox.pack_start(def_hbox, False, False, 0)
+        
+        # Advanced fields section
+        self.advanced_fields_box = Gtk.VBox(spacing=10)
+        
+        # Pronunciation
+        pron_hbox = Gtk.HBox(spacing=10)
+        pron_label = Gtk.Label("Phát âm:")
+        pron_label.set_size_request(120, -1)
+        pron_label.set_halign(Gtk.Align.START)
+        self.quick_pronunciation_entry = Gtk.Entry()
+        self.quick_pronunciation_entry.set_placeholder_text("/ˈeksæmpəl/...")
+        self.quick_pronunciation_entry.connect("activate", self._on_quick_add_word)
+        pron_hbox.pack_start(pron_label, False, False, 0)
+        pron_hbox.pack_start(self.quick_pronunciation_entry, True, True, 0)
+        self.advanced_fields_box.pack_start(pron_hbox, False, False, 0)
+        
+        # Part of speech
+        pos_hbox = Gtk.HBox(spacing=10)
+        pos_label = Gtk.Label("Loại từ:")
+        pos_label.set_size_request(120, -1)
+        pos_label.set_halign(Gtk.Align.START)
+        self.quick_part_of_speech_combo = Gtk.ComboBoxText()
+        parts_of_speech = [
+            "", "Noun (Danh từ)", "Verb (Động từ)", "Adjective (Tính từ)",
+            "Adverb (Trạng từ)", "Preposition (Giới từ)", "Conjunction (Liên từ)",
+            "Pronoun (Đại từ)", "Interjection (Thán từ)"
+        ]
+        for part in parts_of_speech:
+            self.quick_part_of_speech_combo.append_text(part)
+        self.quick_part_of_speech_combo.set_active(0)
+        pos_hbox.pack_start(pos_label, False, False, 0)
+        pos_hbox.pack_start(self.quick_part_of_speech_combo, True, True, 0)
+        self.advanced_fields_box.pack_start(pos_hbox, False, False, 0)
+        
+        # Example sentences
+        ex_label = Gtk.Label("Ví dụ:")
+        ex_label.set_halign(Gtk.Align.START)
+        self.quick_example_textview = Gtk.TextView()
+        self.quick_example_textview.set_wrap_mode(Gtk.WrapMode.WORD)
+        self.quick_example_textview.set_editable(True)
+        self.quick_example_textview.set_cursor_visible(True)
+        ex_scrolled = Gtk.ScrolledWindow()
+        ex_scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        ex_scrolled.set_min_content_height(60)
+        ex_scrolled.add(self.quick_example_textview)
+        self.advanced_fields_box.pack_start(ex_label, False, False, 0)
+        self.advanced_fields_box.pack_start(ex_scrolled, False, False, 0)
+        
+        # Context sentences
+        ctx_label = Gtk.Label("Ngữ cảnh sử dụng:")
+        ctx_label.set_halign(Gtk.Align.START)
+        self.quick_context_sentences_textview = Gtk.TextView()
+        self.quick_context_sentences_textview.set_wrap_mode(Gtk.WrapMode.WORD)
+        self.quick_context_sentences_textview.set_editable(True)
+        self.quick_context_sentences_textview.set_cursor_visible(True)
+        ctx_scrolled = Gtk.ScrolledWindow()
+        ctx_scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        ctx_scrolled.set_min_content_height(60)
+        ctx_scrolled.add(self.quick_context_sentences_textview)
+        self.advanced_fields_box.pack_start(ctx_label, False, False, 0)
+        self.advanced_fields_box.pack_start(ctx_scrolled, False, False, 0)
+        
+        # Synonyms
+        syn_hbox = Gtk.HBox(spacing=10)
+        syn_label = Gtk.Label("Từ đồng nghĩa:")
+        syn_label.set_size_request(120, -1)
+        syn_label.set_halign(Gtk.Align.START)
+        self.quick_synonyms_entry = Gtk.Entry()
+        self.quick_synonyms_entry.set_placeholder_text("big, large, huge...")
+        self.quick_synonyms_entry.connect("activate", self._on_quick_add_word)
+        syn_hbox.pack_start(syn_label, False, False, 0)
+        syn_hbox.pack_start(self.quick_synonyms_entry, True, True, 0)
+        self.advanced_fields_box.pack_start(syn_hbox, False, False, 0)
+        
+        # Antonyms
+        ant_hbox = Gtk.HBox(spacing=10)
+        ant_label = Gtk.Label("Từ trái nghĩa:")
+        ant_label.set_size_request(120, -1)
+        ant_label.set_halign(Gtk.Align.START)
+        self.quick_antonyms_entry = Gtk.Entry()
+        self.quick_antonyms_entry.set_placeholder_text("small, tiny, little...")
+        self.quick_antonyms_entry.connect("activate", self._on_quick_add_word)
+        ant_hbox.pack_start(ant_label, False, False, 0)
+        ant_hbox.pack_start(self.quick_antonyms_entry, True, True, 0)
+        self.advanced_fields_box.pack_start(ant_hbox, False, False, 0)
+        
+        # Set visibility of advanced fields
+        self.advanced_fields_box.set_visible(show_advanced)
+        form_vbox.pack_start(self.advanced_fields_box, False, False, 0)
+        
+        # Separator for advanced fields
+        self.advanced_separator = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        self.advanced_separator.set_visible(show_advanced)
+        form_vbox.pack_start(self.advanced_separator, False, False, 5)
         
         # Button and status
         button_hbox = Gtk.HBox(spacing=10)
@@ -217,9 +341,14 @@ class MainWindow:
         add_button.get_style_context().add_class("suggested-action")
         button_hbox.pack_start(add_button, False, False, 0)
         
-        # Nút AI sinh nghĩa
-        self.ai_button = Gtk.Button(label="🤖 AI sinh nghĩa")
-        self.ai_button.connect("clicked", self._on_ai_generate_definition)
+        # Nút AI sinh nghĩa hoặc dữ liệu đầy đủ
+        if show_advanced:
+            self.ai_button = Gtk.Button(label="🤖 AI sinh dữ liệu đầy đủ")
+            self.ai_button.connect("clicked", self._on_ai_generate_comprehensive_quick)
+        else:
+            self.ai_button = Gtk.Button(label="🤖 AI sinh nghĩa")
+            self.ai_button.connect("clicked", self._on_ai_generate_definition)
+        
         if ai_helper.is_available():
             self.ai_button.get_style_context().add_class("suggested-action")
         else:
@@ -285,8 +414,8 @@ class MainWindow:
         vbox.pack_start(word_label, False, False, 0)
         vbox.pack_start(self.full_word_entry, False, False, 0)
         
-        # Nghĩa
-        def_label = Gtk.Label("Nghĩa:")
+        # Nghĩa tiếng Việt
+        def_label = Gtk.Label("Nghĩa tiếng Việt:")
         def_label.set_halign(Gtk.Align.START)
         self.definition_textview = Gtk.TextView()
         self.definition_textview.set_wrap_mode(Gtk.WrapMode.WORD)
@@ -294,31 +423,14 @@ class MainWindow:
         self.definition_textview.set_cursor_visible(True)
         self.definition_textview.set_can_focus(True)
         self.definition_textview.connect("key-press-event", self._on_textview_key_press)
+        def_scrolled = Gtk.ScrolledWindow()
+        def_scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        def_scrolled.set_min_content_height(60)
+        def_scrolled.add(self.definition_textview)
         vbox.pack_start(def_label, False, False, 0)
-        vbox.pack_start(self.definition_textview, False, False, 0)
+        vbox.pack_start(def_scrolled, False, False, 0)
         
-        # Ví dụ
-        example_label = Gtk.Label("Ví dụ:")
-        example_label.set_halign(Gtk.Align.START)
-        self.example_textview = Gtk.TextView()
-        self.example_textview.set_wrap_mode(Gtk.WrapMode.WORD)
-        self.example_textview.set_editable(True)
-        self.example_textview.set_cursor_visible(True)
-        self.example_textview.set_can_focus(True)
-        self.example_textview.connect("key-press-event", self._on_textview_key_press)
-        vbox.pack_start(example_label, False, False, 0)
-        vbox.pack_start(self.example_textview, False, False, 0)
-        
-        # Phát âm
-        pronunciation_label = Gtk.Label("Phát âm:")
-        pronunciation_label.set_halign(Gtk.Align.START)
-        self.pronunciation_entry = Gtk.Entry()
-        self.pronunciation_entry.set_placeholder_text("Nhập phát âm (nếu có)...")
-        self.pronunciation_entry.connect("activate", self._on_save_vocabulary)
-        vbox.pack_start(pronunciation_label, False, False, 0)
-        vbox.pack_start(self.pronunciation_entry, False, False, 0)
-        
-        # Bộ phận
+        # Loại từ
         part_of_speech_label = Gtk.Label("Loại từ:")
         part_of_speech_label.set_halign(Gtk.Align.START)
         self.part_of_speech_combo = Gtk.ComboBoxText()
@@ -337,15 +449,85 @@ class MainWindow:
         vbox.pack_start(part_of_speech_label, False, False, 0)
         vbox.pack_start(self.part_of_speech_combo, False, False, 0)
         
-        # Nút lưu và hủy
+        # Phát âm
+        pronunciation_label = Gtk.Label("Phát âm:")
+        pronunciation_label.set_halign(Gtk.Align.START)
+        self.pronunciation_entry = Gtk.Entry()
+        self.pronunciation_entry.set_placeholder_text("Nhập phát âm (VD: /wɜːrd/)...")
+        self.pronunciation_entry.connect("activate", self._on_save_vocabulary)
+        vbox.pack_start(pronunciation_label, False, False, 0)
+        vbox.pack_start(self.pronunciation_entry, False, False, 0)
+        
+        # Ví dụ
+        example_label = Gtk.Label("Ví dụ:")
+        example_label.set_halign(Gtk.Align.START)
+        self.example_textview = Gtk.TextView()
+        self.example_textview.set_wrap_mode(Gtk.WrapMode.WORD)
+        self.example_textview.set_editable(True)
+        self.example_textview.set_cursor_visible(True)
+        self.example_textview.set_can_focus(True)
+        self.example_textview.connect("key-press-event", self._on_textview_key_press)
+        ex_scrolled = Gtk.ScrolledWindow()
+        ex_scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        ex_scrolled.set_min_content_height(60)
+        ex_scrolled.add(self.example_textview)
+        vbox.pack_start(example_label, False, False, 0)
+        vbox.pack_start(ex_scrolled, False, False, 0)
+        
+        # Ngữ cảnh sử dụng
+        context_label = Gtk.Label("Ngữ cảnh sử dụng:")
+        context_label.set_halign(Gtk.Align.START)
+        self.context_sentences_textview = Gtk.TextView()
+        self.context_sentences_textview.set_wrap_mode(Gtk.WrapMode.WORD)
+        self.context_sentences_textview.set_editable(True)
+        self.context_sentences_textview.set_cursor_visible(True)
+        self.context_sentences_textview.set_can_focus(True)
+        self.context_sentences_textview.connect("key-press-event", self._on_textview_key_press)
+        context_scrolled = Gtk.ScrolledWindow()
+        context_scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        context_scrolled.set_min_content_height(80)
+        context_scrolled.add(self.context_sentences_textview)
+        vbox.pack_start(context_label, False, False, 0)
+        vbox.pack_start(context_scrolled, False, False, 0)
+        
+        # Từ đồng nghĩa
+        synonyms_label = Gtk.Label("Từ đồng nghĩa:")
+        synonyms_label.set_halign(Gtk.Align.START)
+        self.synonyms_entry = Gtk.Entry()
+        self.synonyms_entry.set_placeholder_text("Nhập từ đồng nghĩa (cách nhau bằng dấu phẩy)...")
+        self.synonyms_entry.connect("activate", self._on_save_vocabulary)
+        vbox.pack_start(synonyms_label, False, False, 0)
+        vbox.pack_start(self.synonyms_entry, False, False, 0)
+        
+        # Từ trái nghĩa
+        antonyms_label = Gtk.Label("Từ trái nghĩa:")
+        antonyms_label.set_halign(Gtk.Align.START)
+        self.antonyms_entry = Gtk.Entry()
+        self.antonyms_entry.set_placeholder_text("Nhập từ trái nghĩa (cách nhau bằng dấu phẩy)...")
+        self.antonyms_entry.connect("activate", self._on_save_vocabulary)
+        vbox.pack_start(antonyms_label, False, False, 0)
+        vbox.pack_start(self.antonyms_entry, False, False, 0)
+        
+        # Nút AI sinh dữ liệu đầy đủ và lưu
         button_box = Gtk.HBox(spacing=10)
-        self.save_button = Gtk.Button(label="Lưu từ vựng")
+        
+        ai_full_button = Gtk.Button(label="🤖 AI sinh dữ liệu đầy đủ")
+        ai_full_button.connect("clicked", self._on_ai_generate_full_data)
+        if ai_helper.is_available():
+            ai_full_button.get_style_context().add_class("suggested-action")
+        else:
+            ai_full_button.set_sensitive(False)
+        button_box.pack_start(ai_full_button, False, False, 0)
+        
+        self.save_button = Gtk.Button(label="💾 Lưu từ vựng")
         self.save_button.connect("clicked", self._on_save_vocabulary)
         self.save_button.get_style_context().add_class("suggested-action")
-        self.cancel_button = Gtk.Button(label="Hủy")
-        self.cancel_button.connect("clicked", self._on_cancel_vocabulary)
         button_box.pack_start(self.save_button, False, False, 0)
+        
+        self.cancel_button = Gtk.Button(label="❌ Hủy")
+        self.cancel_button.connect("clicked", self._on_cancel_vocabulary)
         button_box.pack_start(self.cancel_button, False, False, 0)
+        
         vbox.pack_start(button_box, False, False, 0)
         
         return vbox
@@ -424,8 +606,52 @@ class MainWindow:
             self._update_status("❌ Vui lòng nhập cả từ vựng và nghĩa!", "error")
             return
         
-        # Thêm từ vựng vào database
-        success = self.vocab_manager.add_vocabulary(word, definition)
+        # Lấy dữ liệu từ các trường nâng cao (nếu có)
+        pronunciation = ""
+        part_of_speech = ""
+        example = ""
+        context_sentences = ""
+        synonyms = ""
+        antonyms = ""
+        
+        # Kiểm tra nếu advanced fields đang hiển thị
+        show_advanced = config_manager.get_ui_setting('show_advanced_fields', False)
+        if show_advanced:
+            # Pronunciation
+            if self.quick_pronunciation_entry:
+                pronunciation = self.quick_pronunciation_entry.get_text().strip()
+            
+            # Part of speech
+            if self.quick_part_of_speech_combo:
+                part_of_speech = self.quick_part_of_speech_combo.get_active_text() or ""
+            
+            # Example
+            if self.quick_example_textview:
+                buffer = self.quick_example_textview.get_buffer()
+                start_iter = buffer.get_start_iter()
+                end_iter = buffer.get_end_iter()
+                example = buffer.get_text(start_iter, end_iter, False).strip()
+            
+            # Context sentences
+            if self.quick_context_sentences_textview:
+                buffer = self.quick_context_sentences_textview.get_buffer()
+                start_iter = buffer.get_start_iter()
+                end_iter = buffer.get_end_iter()
+                context_sentences = buffer.get_text(start_iter, end_iter, False).strip()
+            
+            # Synonyms
+            if self.quick_synonyms_entry:
+                synonyms = self.quick_synonyms_entry.get_text().strip()
+            
+            # Antonyms
+            if self.quick_antonyms_entry:
+                antonyms = self.quick_antonyms_entry.get_text().strip()
+        
+        # Thêm từ vựng vào database với tất cả các trường
+        success = self.vocab_manager.add_vocabulary(
+            word, definition, example, pronunciation, part_of_speech,
+            context_sentences, synonyms, antonyms
+        )
         
         if success:
             self._update_status(f"✅ Đã thêm từ '{word}' thành công!", "success")
@@ -450,6 +676,28 @@ class MainWindow:
             self.word_entry.set_text("")
         if self.definition_entry:
             self.definition_entry.set_text("")
+        
+        # Xóa các trường nâng cao nếu có
+        if hasattr(self, 'quick_pronunciation_entry') and self.quick_pronunciation_entry:
+            self.quick_pronunciation_entry.set_text("")
+        
+        if hasattr(self, 'quick_part_of_speech_combo') and self.quick_part_of_speech_combo:
+            self.quick_part_of_speech_combo.set_active(0)
+        
+        if hasattr(self, 'quick_example_textview') and self.quick_example_textview:
+            buffer = self.quick_example_textview.get_buffer()
+            buffer.set_text("")
+        
+        if hasattr(self, 'quick_context_sentences_textview') and self.quick_context_sentences_textview:
+            buffer = self.quick_context_sentences_textview.get_buffer()
+            buffer.set_text("")
+        
+        if hasattr(self, 'quick_synonyms_entry') and self.quick_synonyms_entry:
+            self.quick_synonyms_entry.set_text("")
+        
+        if hasattr(self, 'quick_antonyms_entry') and self.quick_antonyms_entry:
+            self.quick_antonyms_entry.set_text("")
+        
         self._update_status("", "")
         if self.word_entry:
             self.word_entry.grab_focus()
@@ -480,17 +728,22 @@ class MainWindow:
     
     def _on_ai_generate_definition(self, widget):
         """Xử lý khi click nút AI sinh nghĩa"""
+        log_message("DEBUG: _on_ai_generate_definition called")
+        
         if not ai_helper.is_available():
             self._update_status("❌ AI chưa sẵn sàng! Vui lòng kiểm tra thiết lập.", "error")
             return
         
         if not self.word_entry:
+            log_message("ERROR: word_entry is None")
             return
             
         word = self.word_entry.get_text().strip()
         if not word:
             self._update_status("❌ Vui lòng nhập từ vựng trước!", "error")
             return
+        
+        log_message(f"DEBUG: Generating definition for word: {word}")
         
         # Disable nút AI và hiển thị trạng thái loading
         if self.ai_button:
@@ -502,7 +755,9 @@ class MainWindow:
         # Sử dụng GLib.idle_add để tránh block UI
         def generate_in_background():
             try:
+                log_message("DEBUG: Starting AI generation in background thread")
                 definition = ai_helper.generate_definition(word)
+                log_message(f"DEBUG: AI generation complete, result: {definition}")
                 
                 # Cập nhật UI trong main thread
                 GLib.idle_add(self._on_ai_generation_complete, definition, word)
@@ -516,9 +771,12 @@ class MainWindow:
         thread = threading.Thread(target=generate_in_background)
         thread.daemon = True
         thread.start()
-    
+        log_message("DEBUG: Background thread started")
+
     def _on_ai_generation_complete(self, definition, word):
         """Xử lý khi AI hoàn thành sinh nghĩa"""
+        log_message(f"DEBUG: _on_ai_generation_complete called with definition: {definition}")
+        
         # Restore nút AI
         if self.ai_button:
             self.ai_button.set_sensitive(True)
@@ -527,7 +785,10 @@ class MainWindow:
         if definition:
             # Điền nghĩa vào definition entry
             if self.definition_entry:
+                log_message("DEBUG: Setting definition to entry")
                 self.definition_entry.set_text(definition)
+            else:
+                log_message("ERROR: definition_entry is None")
             
             self._update_status(f"✅ AI đã sinh nghĩa cho '{word}' thành công!", "success")
             
@@ -539,6 +800,211 @@ class MainWindow:
                 
         else:
             self._update_status(f"❌ Không thể sinh nghĩa cho '{word}'. Vui lòng thử lại hoặc nhập thủ công.", "error")
+        
+        return False  # Chỉ chạy một lần
+    
+    def _on_vocabulary_clicked(self, widget):
+        """Xử lý khi click nút từ vựng"""
+        # This method is no longer needed as the full management is in the stack
+        # self.vocabulary_window = VocabularyWindow(self.window)
+        # self.vocabulary_window.show()
+        # log_message("Mở cửa sổ quản lý từ vựng")
+        pass # No-op as the full management is in the stack
+    
+    def _on_quit_clicked(self, widget):
+        """Xử lý khi click nút thoát"""
+        self.app.quit()
+    
+    def _on_window_delete(self, widget, event):
+        """Xử lý khi đóng cửa sổ"""
+        self.hide()
+        return True  # Ngăn destroy window
+    
+    def _on_key_press(self, widget, event):
+        """Xử lý phím tắt"""
+        # Ctrl+M để mở quản lý từ vựng đầy đủ
+        if event.state & Gdk.ModifierType.CONTROL_MASK and event.keyval == Gdk.KEY_m:
+            self._on_vocabulary_clicked(None)
+            return True
+        
+        # Ctrl+Q để thoát
+        if event.state & Gdk.ModifierType.CONTROL_MASK and event.keyval == Gdk.KEY_q:
+            self._on_quit_clicked(None)
+            return True
+        
+        # Escape để xóa form
+        if event.keyval == Gdk.KEY_Escape:
+            self._clear_quick_form()
+            return True
+        
+        return False
+    
+    def show(self):
+        """Hiển thị cửa sổ"""
+        if self.window:
+            # Đảm bảo cửa sổ hiển thị
+            self.window.show_all()
+            
+            # Đặt cửa sổ lên trên tất cả các cửa sổ khác
+            self.window.set_keep_above(True)
+            
+            # Present để focus và đưa cửa sổ lên đầu
+            self.window.present()
+            
+            # Đảm bảo cửa sổ có thể nhận input
+            self.window.set_can_focus(True)
+            
+            # Grab focus cho cửa sổ
+            self.window.grab_focus()
+            
+            # Unmap và map lại để force refresh (workaround cho một số DE)
+            if not self.window.get_visible():
+                self.window.deiconify()
+            
+            # Tắt keep_above sau một chút để không ảnh hưởng UX
+            GLib.timeout_add_seconds(1, lambda: self._disable_keep_above())
+            
+            # Focus vào word entry để sẵn sàng nhập từ vựng
+            if self.word_entry:
+                GLib.timeout_add(100, self._delayed_focus_word_entry)
+            
+            log_message("Hiển thị cửa sổ chính")
+    
+    def _disable_keep_above(self):
+        """Tắt keep_above sau khi cửa sổ đã hiển thị"""
+        if self.window:
+            self.window.set_keep_above(False)
+        return False  # Chỉ chạy một lần
+    
+    def _delayed_focus_word_entry(self):
+        """Focus vào word entry sau một delay ngắn"""
+        if self.word_entry:
+            self.word_entry.grab_focus()
+        return False  # Chỉ chạy một lần
+    
+    def hide(self):
+        """Ẩn cửa sổ"""
+        if self.window:
+            self.window.hide()
+            log_message("Ẩn cửa sổ xuống system tray")
+    
+    def destroy(self):
+        """Hủy cửa sổ"""
+        # Đóng vocabulary window nếu đang mở
+        # if self.vocabulary_window:
+        #     self.vocabulary_window.destroy()
+        
+        if self.window:
+            self.window.destroy()
+            log_message("Đóng cửa sổ chính") 
+
+    def _on_mode_switch_clicked(self, widget):
+        """Xử lý khi click nút chuyển đổi chế độ"""
+        if self.current_mode == "quick":
+            if self.stack:
+                self.stack.set_visible_child_name("full")
+            self.current_mode = "full"
+            if self.mode_button:
+                self.mode_button.set_label("📝 Chế độ thêm nhanh")
+            if self.window:
+                self.window.set_default_size(900, 600)
+            log_message("Chuyển sang chế độ quản lý đầy đủ")
+        else:
+            if self.stack:
+                self.stack.set_visible_child_name("quick")
+            self.current_mode = "quick"
+            if self.mode_button:
+                self.mode_button.set_label("📚 Chế độ quản lý")
+            if self.window:
+                self.window.set_default_size(500, 400)
+            log_message("Chuyển sang chế độ thêm nhanh")
+    
+    def _on_ai_generate_full_data(self, widget):
+        """Xử lý khi click nút AI sinh dữ liệu đầy đủ"""
+        if not ai_helper.is_available():
+            self._show_message("❌ AI chưa sẵn sàng! Vui lòng kiểm tra thiết lập.", "error")
+            return
+        
+        if not self.full_word_entry:
+            return
+            
+        word = self.full_word_entry.get_text().strip()
+        if not word:
+            self._show_message("❌ Vui lòng nhập từ vựng trước!", "error")
+            return
+        
+        # Disable nút AI và hiển thị trạng thái loading
+        widget.set_sensitive(False)
+        widget.set_label("⏳ Đang sinh dữ liệu...")
+        
+        self._show_message("🤖 AI đang sinh dữ liệu đầy đủ...", "info")
+        
+        # Sử dụng GLib.idle_add để tránh block UI
+        def generate_in_background():
+            try:
+                vocab_data = ai_helper.generate_comprehensive_vocabulary_data(word)
+                
+                # Cập nhật UI trong main thread
+                GLib.idle_add(self._on_ai_full_generation_complete, vocab_data, word, widget)
+                
+            except Exception as e:
+                log_message(f"ERROR: Lỗi trong background AI generation: {e}")
+                GLib.idle_add(self._on_ai_full_generation_complete, None, word, widget)
+        
+        # Chạy AI generation trong background thread
+        import threading
+        thread = threading.Thread(target=generate_in_background)
+        thread.daemon = True
+        thread.start()
+    
+    def _on_ai_full_generation_complete(self, vocab_data, word, ai_button):
+        """Xử lý khi AI hoàn thành sinh dữ liệu đầy đủ"""
+        # Restore nút AI
+        ai_button.set_sensitive(True)
+        ai_button.set_label("🤖 AI sinh dữ liệu đầy đủ")
+        
+        if vocab_data:
+            # Điền dữ liệu vào các trường
+            
+            # Nghĩa tiếng Việt
+            if self.definition_textview and vocab_data.get('vietnamese_meaning'):
+                def_buffer = self.definition_textview.get_buffer()
+                def_buffer.set_text(vocab_data['vietnamese_meaning'])
+            
+            # Loại từ
+            if self.part_of_speech_combo and vocab_data.get('word_type'):
+                word_type = vocab_data['word_type']
+                combo_model = self.part_of_speech_combo.get_model()
+                for i, row in enumerate(combo_model):
+                    if word_type.lower() in row[0].lower():
+                        self.part_of_speech_combo.set_active(i)
+                        break
+            
+            # Phát âm
+            if self.pronunciation_entry and vocab_data.get('pronunciation'):
+                self.pronunciation_entry.set_text(vocab_data['pronunciation'])
+            
+            # Ngữ cảnh sử dụng
+            if self.context_sentences_textview and vocab_data.get('context_sentences'):
+                context_buffer = self.context_sentences_textview.get_buffer()
+                context_buffer.set_text(vocab_data['context_sentences'])
+            
+            # Từ đồng nghĩa
+            if self.synonyms_entry and vocab_data.get('synonyms'):
+                self.synonyms_entry.set_text(vocab_data['synonyms'])
+            
+            # Từ trái nghĩa
+            if self.antonyms_entry and vocab_data.get('antonyms'):
+                self.antonyms_entry.set_text(vocab_data['antonyms'])
+            
+            self._show_message(f"✅ AI đã sinh dữ liệu đầy đủ cho '{word}' thành công!", "success")
+            
+            # Focus vào definition để user có thể chỉnh sửa
+            if self.definition_textview:
+                self.definition_textview.grab_focus()
+                
+        else:
+            self._show_message(f"❌ Không thể sinh dữ liệu cho '{word}'. Vui lòng thử lại hoặc nhập thủ công.", "error")
         
         return False  # Chỉ chạy một lần
     
@@ -683,15 +1149,29 @@ class MainWindow:
                 end_iter = example_buffer.get_end_iter()
                 example = example_buffer.get_text(start_iter, end_iter, False).strip()
         
+        # Lấy context sentences từ textview
+        context_sentences = ""
+        if self.context_sentences_textview:
+            context_buffer = self.context_sentences_textview.get_buffer()
+            if context_buffer:
+                start_iter = context_buffer.get_start_iter()
+                end_iter = context_buffer.get_end_iter()
+                context_sentences = context_buffer.get_text(start_iter, end_iter, False).strip()
+        
         pronunciation = self.pronunciation_entry.get_text().strip() if self.pronunciation_entry else ""
         part_of_speech = self.part_of_speech_combo.get_active_text() if self.part_of_speech_combo else ""
+        synonyms = self.synonyms_entry.get_text().strip() if self.synonyms_entry else ""
+        antonyms = self.antonyms_entry.get_text().strip() if self.antonyms_entry else ""
         
         if not word or not definition:
             self._show_message("Vui lòng nhập cả từ vựng và nghĩa!", "error")
             return
         
-        # Lưu vào database (chỉ thêm mới, không update vì không có get_vocabulary_by_id)
-        success = self.vocab_manager.add_vocabulary(word, definition, example, pronunciation, part_of_speech)
+        # Lưu vào database với tất cả các trường
+        success = self.vocab_manager.add_vocabulary(
+            word, definition, example, pronunciation, part_of_speech,
+            context_sentences, synonyms, antonyms
+        )
         if success:
             self._show_message(f"Đã thêm từ '{word}' thành công!", "success")
             self._clear_full_form()
@@ -747,28 +1227,42 @@ class MainWindow:
             example_buffer = self.example_textview.get_buffer()
             if example_buffer:
                 example_buffer.set_text("")
+        
+        if self.context_sentences_textview:
+            context_buffer = self.context_sentences_textview.get_buffer()
+            if context_buffer:
+                context_buffer.set_text("")
             
         if self.pronunciation_entry:
             self.pronunciation_entry.set_text("")
+        
+        if self.synonyms_entry:
+            self.synonyms_entry.set_text("")
+        
+        if self.antonyms_entry:
+            self.antonyms_entry.set_text("")
             
         if self.part_of_speech_combo:
             self.part_of_speech_combo.set_active(0)
-    
+
     def _populate_vocabulary_list(self, vocabularies):
         """Điền danh sách từ vựng vào TreeView"""
         if not self.vocabulary_list:
             return
             
-        # Tạo model cho TreeView
-        store = Gtk.ListStore(str, str, str, str, str, int)  # word, definition, part_of_speech, example, pronunciation, id
+        # Tạo model cho TreeView với nhiều cột hơn
+        store = Gtk.ListStore(str, str, str, str, str, str, str, str, int)  # word, definition, part_of_speech, pronunciation, synonyms, antonyms, context_sentences, example, id
         
         for vocab in vocabularies:
             store.append([
                 vocab.get('word', ''),
                 vocab.get('definition', ''),
                 vocab.get('part_of_speech', ''),
-                vocab.get('example', ''),
                 vocab.get('pronunciation', ''),
+                vocab.get('synonyms', ''),
+                vocab.get('antonyms', ''),
+                vocab.get('context_sentences', ''),
+                vocab.get('example', ''),
                 vocab.get('id', 0)
             ])
         
@@ -788,4 +1282,164 @@ class MainWindow:
         """Hiển thị thông báo"""
         # Tạm thời log message, có thể thêm popup dialog sau
         log_message(f"[{message_type.upper()}] {message}")
-        print(f"[{message_type.upper()}] {message}") 
+        print(f"[{message_type.upper()}] {message}")
+    
+    def _on_settings_clicked(self, widget):
+        """Hiển thị cửa sổ Settings"""
+        try:
+            settings_window = SettingsWindow(self.window)
+            settings_window.show()
+            log_message("Opened Settings window")
+        except Exception as e:
+            log_message(f"Error opening Settings: {e}", "ERROR")
+            self._show_message(f"Lỗi mở Settings: {e}", "error")
+    
+    def _on_toggle_advanced_fields(self, toggle_button):
+        """Toggle hiển thị các trường nâng cao trong quick add"""
+        show_advanced = toggle_button.get_active()
+        
+        # Lưu vào config và đảm bảo nó được lưu
+        config_manager.set_ui_setting('show_advanced_fields', show_advanced)
+        
+        # Cập nhật hiển thị
+        if hasattr(self, 'advanced_fields_box'):
+            self.advanced_fields_box.set_visible(show_advanced)
+        if hasattr(self, 'advanced_separator'):
+            self.advanced_separator.set_visible(show_advanced)
+        
+        # Cập nhật nút AI
+        if self.ai_button:
+            # Disconnect existing handlers
+            try:
+                self.ai_button.disconnect_by_func(self._on_ai_generate_definition)
+            except:
+                pass
+            try:
+                self.ai_button.disconnect_by_func(self._on_ai_generate_comprehensive_quick)
+            except:
+                pass
+            
+            if show_advanced:
+                self.ai_button.set_label("🤖 AI sinh dữ liệu đầy đủ")
+                self.ai_button.connect("clicked", self._on_ai_generate_comprehensive_quick)
+                log_message("AI button switched to comprehensive mode")
+            else:
+                self.ai_button.set_label("🤖 AI sinh nghĩa")
+                self.ai_button.connect("clicked", self._on_ai_generate_definition)
+                log_message("AI button switched to simple mode")
+        
+        log_message(f"Toggled advanced fields: {show_advanced}")
+
+    def _on_ai_generate_comprehensive_quick(self, widget):
+        """Generate comprehensive data trong quick add mode"""
+        word = self.word_entry.get_text().strip()
+        if not word:
+            self._update_status("Vui lòng nhập từ vựng trước!", "error")
+            return
+        
+        if not ai_helper.is_available():
+            self._update_status("AI không sẵn sàng. Vui lòng kiểm tra cấu hình.", "error")
+            return
+        
+        # Disable button và hiển thị trạng thái
+        widget.set_sensitive(False)
+        widget.set_label("⏳ AI đang sinh dữ liệu...")
+        self._update_status("🤖 AI đang sinh dữ liệu đầy đủ...", "")
+        
+        def generate_in_background():
+            try:
+                vocab_data = ai_helper.generate_comprehensive_vocabulary_data(word)
+                GLib.idle_add(self._on_ai_comprehensive_quick_complete, vocab_data, word, widget)
+            except Exception as e:
+                GLib.idle_add(self._on_ai_comprehensive_quick_complete, None, word, widget, str(e))
+        
+        thread = threading.Thread(target=generate_in_background)
+        thread.daemon = True
+        thread.start()
+    
+    def _on_ai_comprehensive_quick_complete(self, vocab_data, word, ai_button, error=None):
+        """Xử lý kết quả sinh dữ liệu AI cho quick add"""
+        ai_button.set_sensitive(True)
+        ai_button.set_label("🤖 AI sinh dữ liệu đầy đủ")
+        
+        if error:
+            self._update_status(f"Lỗi AI: {error}", "error")
+            return False
+        
+        if not vocab_data:
+            self._update_status("AI không thể sinh dữ liệu. Vui lòng thử lại.", "error")
+            return False
+        
+        try:
+            log_message(f"DEBUG: Filling comprehensive data: {vocab_data}")
+            
+            # Điền nghĩa tiếng Việt
+            vietnamese_meaning = vocab_data.get('vietnamese_meaning', '').strip()
+            if vietnamese_meaning and self.definition_entry:
+                self.definition_entry.set_text(vietnamese_meaning)
+                log_message(f"DEBUG: Set definition: {vietnamese_meaning}")
+            
+            # Điền phát âm
+            pronunciation = vocab_data.get('pronunciation', '').strip()
+            if pronunciation and hasattr(self, 'quick_pronunciation_entry') and self.quick_pronunciation_entry:
+                self.quick_pronunciation_entry.set_text(pronunciation)
+                log_message(f"DEBUG: Set pronunciation: {pronunciation}")
+            
+            # Điền loại từ
+            word_type = vocab_data.get('word_type', '').strip()
+            if word_type and hasattr(self, 'quick_part_of_speech_combo') and self.quick_part_of_speech_combo:
+                # Tìm và select word type phù hợp
+                combo_model = self.quick_part_of_speech_combo.get_model()
+                if combo_model:
+                    for i, row in enumerate(combo_model):
+                        if row[0] and word_type.lower() in row[0].lower():
+                            self.quick_part_of_speech_combo.set_active(i)
+                            log_message(f"DEBUG: Set part of speech: {row[0]}")
+                            break
+            
+            # Điền ví dụ
+            example = vocab_data.get('example', '').strip()
+            if example and hasattr(self, 'quick_example_textview') and self.quick_example_textview:
+                buffer = self.quick_example_textview.get_buffer()
+                buffer.set_text(example)
+                log_message(f"DEBUG: Set example: {example}")
+            
+            # Điền ngữ cảnh sử dụng
+            context_sentences = vocab_data.get('context_sentences', '')
+            if context_sentences and hasattr(self, 'quick_context_sentences_textview') and self.quick_context_sentences_textview:
+                if isinstance(context_sentences, list):
+                    context_text = '\n'.join(context_sentences)
+                else:
+                    context_text = str(context_sentences)
+                buffer = self.quick_context_sentences_textview.get_buffer()
+                buffer.set_text(context_text)
+                log_message(f"DEBUG: Set context: {context_text}")
+            
+            # Điền từ đồng nghĩa
+            synonyms = vocab_data.get('synonyms', '')
+            if synonyms and hasattr(self, 'quick_synonyms_entry') and self.quick_synonyms_entry:
+                if isinstance(synonyms, list):
+                    synonyms_text = ', '.join(synonyms)
+                else:
+                    synonyms_text = str(synonyms)
+                self.quick_synonyms_entry.set_text(synonyms_text)
+                log_message(f"DEBUG: Set synonyms: {synonyms_text}")
+            
+            # Điền từ trái nghĩa
+            antonyms = vocab_data.get('antonyms', '')
+            if antonyms and hasattr(self, 'quick_antonyms_entry') and self.quick_antonyms_entry:
+                if isinstance(antonyms, list):
+                    antonyms_text = ', '.join(antonyms)
+                else:
+                    antonyms_text = str(antonyms)
+                self.quick_antonyms_entry.set_text(antonyms_text)
+                log_message(f"DEBUG: Set antonyms: {antonyms_text}")
+            
+            self._update_status("✅ AI đã sinh dữ liệu đầy đủ thành công!", "success")
+            log_message(f"AI generated comprehensive data for word: {word}")
+            
+        except Exception as e:
+            log_message(f"ERROR: Error populating quick form: {e}", "ERROR")
+            self._update_status(f"Lỗi điền dữ liệu: {e}", "error")
+        
+        return False

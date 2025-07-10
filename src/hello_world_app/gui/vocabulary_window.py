@@ -9,6 +9,7 @@ from typing import Optional, Dict
 
 from ..core.vocabulary_manager import VocabularyManager
 from ..utils.helpers import log_message
+from ..utils.ai_helper import ai_helper
 
 class VocabularyWindow:
     """Class quản lý cửa sổ từ vựng"""
@@ -24,6 +25,9 @@ class VocabularyWindow:
         self.example_textview = None
         self.pronunciation_entry = None
         self.part_of_speech_combo = None
+        self.context_sentences_textview = None
+        self.synonyms_entry = None
+        self.antonyms_entry = None
         self.current_editing_id = None
         self.setup_ui()
         self.refresh_vocabulary_list()
@@ -84,6 +88,9 @@ class VocabularyWindow:
         vbox.pack_start(self._create_part_of_speech_field(), False, False, 0)
         vbox.pack_start(self._create_definition_field(), True, True, 0)
         vbox.pack_start(self._create_example_field(), True, True, 0)
+        vbox.pack_start(self._create_context_sentences_field(), True, True, 0)
+        vbox.pack_start(self._create_synonyms_field(), False, False, 0)
+        vbox.pack_start(self._create_antonyms_field(), False, False, 0)
         
         # Buttons
         button_box = self._create_button_box()
@@ -149,22 +156,19 @@ class VocabularyWindow:
         return vbox
     
     def _create_definition_field(self) -> Gtk.VBox:
-        """Tạo field nhập định nghĩa"""
+        """Tạo field nhập nghĩa"""
         vbox = Gtk.VBox(spacing=5)
         
-        label = Gtk.Label("Định nghĩa *")
+        label = Gtk.Label("Nghĩa tiếng Việt *")
         label.set_halign(Gtk.Align.START)
         vbox.pack_start(label, False, False, 0)
         
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scrolled.set_size_request(-1, 80)
+        scrolled.set_min_content_height(80)
         
         self.definition_textview = Gtk.TextView()
         self.definition_textview.set_wrap_mode(Gtk.WrapMode.WORD)
-        buffer = self.definition_textview.get_buffer()
-        buffer.set_text("Nhập định nghĩa...")
-        
         scrolled.add(self.definition_textview)
         vbox.pack_start(scrolled, True, True, 0)
         
@@ -180,38 +184,91 @@ class VocabularyWindow:
         
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-        scrolled.set_size_request(-1, 60)
+        scrolled.set_min_content_height(80)
         
         self.example_textview = Gtk.TextView()
         self.example_textview.set_wrap_mode(Gtk.WrapMode.WORD)
-        buffer = self.example_textview.get_buffer()
-        buffer.set_text("Nhập ví dụ sử dụng...")
-        
         scrolled.add(self.example_textview)
         vbox.pack_start(scrolled, True, True, 0)
         
         return vbox
-    
+
+    def _create_context_sentences_field(self) -> Gtk.VBox:
+        """Tạo field nhập ngữ cảnh sử dụng"""
+        vbox = Gtk.VBox(spacing=5)
+        
+        label = Gtk.Label("Ngữ cảnh sử dụng")
+        label.set_halign(Gtk.Align.START)
+        vbox.pack_start(label, False, False, 0)
+        
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scrolled.set_min_content_height(100)
+        
+        self.context_sentences_textview = Gtk.TextView()
+        self.context_sentences_textview.set_wrap_mode(Gtk.WrapMode.WORD)
+        scrolled.add(self.context_sentences_textview)
+        vbox.pack_start(scrolled, True, True, 0)
+        
+        return vbox
+
+    def _create_synonyms_field(self) -> Gtk.VBox:
+        """Tạo field nhập từ đồng nghĩa"""
+        vbox = Gtk.VBox(spacing=5)
+        
+        label = Gtk.Label("Từ đồng nghĩa")
+        label.set_halign(Gtk.Align.START)
+        vbox.pack_start(label, False, False, 0)
+        
+        self.synonyms_entry = Gtk.Entry()
+        self.synonyms_entry.set_placeholder_text("Nhập từ đồng nghĩa (cách nhau bằng dấu phẩy)")
+        vbox.pack_start(self.synonyms_entry, False, False, 0)
+        
+        return vbox
+
+    def _create_antonyms_field(self) -> Gtk.VBox:
+        """Tạo field nhập từ trái nghĩa"""
+        vbox = Gtk.VBox(spacing=5)
+        
+        label = Gtk.Label("Từ trái nghĩa")
+        label.set_halign(Gtk.Align.START)
+        vbox.pack_start(label, False, False, 0)
+        
+        self.antonyms_entry = Gtk.Entry()
+        self.antonyms_entry.set_placeholder_text("Nhập từ trái nghĩa (cách nhau bằng dấu phẩy)")
+        vbox.pack_start(self.antonyms_entry, False, False, 0)
+        
+        return vbox
+
     def _create_button_box(self) -> Gtk.HBox:
         """Tạo box chứa các nút"""
         hbox = Gtk.HBox(spacing=10)
         
+        # Nút AI sinh dữ liệu đầy đủ
+        ai_button = Gtk.Button(label="🤖 AI sinh dữ liệu đầy đủ")
+        ai_button.connect("clicked", self._on_ai_generate_full_data)
+        if ai_helper.is_available():
+            ai_button.get_style_context().add_class("suggested-action")
+        else:
+            ai_button.set_sensitive(False)
+        hbox.pack_start(ai_button, False, False, 0)
+        
         # Nút Lưu
-        self.save_button = Gtk.Button(label="💾 Lưu")
-        self.save_button.connect("clicked", self._on_save_clicked)
-        self.save_button.get_style_context().add_class("suggested-action")
-        hbox.pack_start(self.save_button, True, True, 0)
+        save_button = Gtk.Button(label="💾 Lưu")
+        save_button.connect("clicked", self._on_save_clicked)
+        save_button.get_style_context().add_class("suggested-action")
+        hbox.pack_start(save_button, False, False, 0)
         
         # Nút Clear
-        clear_button = Gtk.Button(label="🗑️ Xóa form")
+        clear_button = Gtk.Button(label="🗑️ Clear")
         clear_button.connect("clicked", self._on_clear_clicked)
-        hbox.pack_start(clear_button, True, True, 0)
+        hbox.pack_start(clear_button, False, False, 0)
         
-        # Nút Cancel (hiện khi edit)
-        self.cancel_button = Gtk.Button(label="❌ Hủy")
-        self.cancel_button.connect("clicked", self._on_cancel_edit_clicked)
-        self.cancel_button.set_no_show_all(True)
-        hbox.pack_start(self.cancel_button, True, True, 0)
+        # Nút Cancel Edit (chỉ hiển thị khi đang edit)
+        self.cancel_edit_button = Gtk.Button(label="❌ Hủy sửa")
+        self.cancel_edit_button.connect("clicked", self._on_cancel_edit_clicked)
+        self.cancel_edit_button.set_visible(False)
+        hbox.pack_start(self.cancel_edit_button, False, False, 0)
         
         return hbox
     
@@ -291,7 +348,7 @@ class VocabularyWindow:
         self.vocabulary_list = Gtk.TreeView()
         
         # Model: word, pronunciation, part_of_speech, definition, example, created_at, id
-        self.list_store = Gtk.ListStore(str, str, str, str, str, str, int)
+        self.list_store = Gtk.ListStore(str, str, str, str, str, str, str, str, str, int)
         self.vocabulary_list.set_model(self.list_store)
         
         # Tạo các cột
@@ -307,12 +364,15 @@ class VocabularyWindow:
     def _create_tree_columns(self):
         """Tạo các cột cho TreeView"""
         columns_config = [
-            ("Từ vựng", 0, 150),
+            ("Từ vựng", 0, 120),
             ("Phát âm", 1, 100),
             ("Loại từ", 2, 100),
-            ("Định nghĩa", 3, 200),
-            ("Ví dụ", 4, 200),
-            ("Ngày tạo", 5, 120)
+            ("Nghĩa", 3, 200),
+            ("Ví dụ", 4, 150),
+            ("Ngữ cảnh", 5, 200),
+            ("Đồng nghĩa", 6, 120),
+            ("Trái nghĩa", 7, 120),
+            ("Ngày tạo", 8, 100)
         ]
         
         for title, column_id, width in columns_config:
@@ -326,7 +386,87 @@ class VocabularyWindow:
             column.set_sort_column_id(column_id)
             
             self.vocabulary_list.append_column(column)
+
+    def _on_ai_generate_full_data(self, widget):
+        """Xử lý khi click nút AI sinh dữ liệu đầy đủ"""
+        if not ai_helper.is_available():
+            self._show_message("❌ AI chưa sẵn sàng! Vui lòng kiểm tra thiết lập.", "error")
+            return
+        
+        word = self.word_entry.get_text().strip()
+        if not word:
+            self._show_message("❌ Vui lòng nhập từ vựng trước!", "error")
+            return
+        
+        # Disable nút AI và hiển thị trạng thái loading
+        widget.set_sensitive(False)
+        widget.set_label("⏳ Đang sinh dữ liệu...")
+        
+        # Sử dụng GLib.idle_add để tránh block UI
+        def generate_in_background():
+            try:
+                vocab_data = ai_helper.generate_comprehensive_vocabulary_data(word)
+                
+                # Cập nhật UI trong main thread
+                GObject.idle_add(self._on_ai_full_generation_complete, vocab_data, word, widget)
+                
+            except Exception as e:
+                log_message(f"ERROR: Lỗi trong background AI generation: {e}")
+                GObject.idle_add(self._on_ai_full_generation_complete, None, word, widget)
+        
+        # Chạy AI generation trong background thread
+        import threading
+        thread = threading.Thread(target=generate_in_background)
+        thread.daemon = True
+        thread.start()
     
+    def _on_ai_full_generation_complete(self, vocab_data, word, ai_button):
+        """Xử lý khi AI hoàn thành sinh dữ liệu đầy đủ"""
+        # Restore nút AI
+        ai_button.set_sensitive(True)
+        ai_button.set_label("🤖 AI sinh dữ liệu đầy đủ")
+        
+        if vocab_data:
+            # Điền dữ liệu vào các trường
+            
+            # Nghĩa tiếng Việt
+            if vocab_data.get('vietnamese_meaning'):
+                def_buffer = self.definition_textview.get_buffer()
+                def_buffer.set_text(vocab_data['vietnamese_meaning'])
+            
+            # Loại từ
+            if vocab_data.get('word_type'):
+                word_type = vocab_data['word_type']
+                combo_model = self.part_of_speech_combo.get_model()
+                for i, row in enumerate(combo_model):
+                    if word_type.lower() in row[0].lower():
+                        self.part_of_speech_combo.set_active(i)
+                        break
+            
+            # Phát âm
+            if vocab_data.get('pronunciation'):
+                self.pronunciation_entry.set_text(vocab_data['pronunciation'])
+            
+            # Ngữ cảnh sử dụng
+            if vocab_data.get('context_sentences'):
+                context_buffer = self.context_sentences_textview.get_buffer()
+                context_buffer.set_text(vocab_data['context_sentences'])
+            
+            # Từ đồng nghĩa
+            if vocab_data.get('synonyms'):
+                self.synonyms_entry.set_text(vocab_data['synonyms'])
+            
+            # Từ trái nghĩa
+            if vocab_data.get('antonyms'):
+                self.antonyms_entry.set_text(vocab_data['antonyms'])
+            
+            self._show_message(f"✅ AI đã sinh dữ liệu đầy đủ cho '{word}' thành công!", "success")
+                
+        else:
+            self._show_message(f"❌ Không thể sinh dữ liệu cho '{word}'. Vui lòng thử lại hoặc nhập thủ công.", "error")
+        
+        return False  # Chỉ chạy một lần
+
     def _on_save_clicked(self, widget):
         """Xử lý khi click nút Lưu"""
         word = self.word_entry.get_text().strip()
@@ -349,6 +489,18 @@ class VocabularyWindow:
             False
         ).strip()
         
+        # Lấy context sentences
+        context_buffer = self.context_sentences_textview.get_buffer()
+        context_sentences = context_buffer.get_text(
+            context_buffer.get_start_iter(),
+            context_buffer.get_end_iter(),
+            False
+        ).strip()
+        
+        # Lấy synonyms và antonyms
+        synonyms = self.synonyms_entry.get_text().strip()
+        antonyms = self.antonyms_entry.get_text().strip()
+        
         # Validation
         if not word or not definition:
             self._show_message("Vui lòng nhập từ vựng và định nghĩa!", "error")
@@ -358,7 +510,8 @@ class VocabularyWindow:
         if self.current_editing_id is not None:
             # Cập nhật
             success = self.vocab_manager.update_vocabulary(
-                self.current_editing_id, word, definition, example, pronunciation, part_of_speech
+                self.current_editing_id, word, definition, example, pronunciation, 
+                part_of_speech, context_sentences, synonyms, antonyms
             )
             if success:
                 self._show_message(f"Đã cập nhật từ '{word}' thành công!", "success")
@@ -368,7 +521,8 @@ class VocabularyWindow:
         else:
             # Thêm mới
             success = self.vocab_manager.add_vocabulary(
-                word, definition, example, pronunciation, part_of_speech
+                word, definition, example, pronunciation, part_of_speech,
+                context_sentences, synonyms, antonyms
             )
             if success:
                 self._show_message(f"Đã thêm từ '{word}' thành công!", "success")
@@ -407,7 +561,7 @@ class VocabularyWindow:
         """Xử lý khi double-click vào row"""
         model = treeview.get_model()
         iter = model.get_iter(path)
-        vocab_id = model.get_value(iter, 6)  # ID ở cột ẩn cuối
+        vocab_id = model.get_value(iter, 9)  # ID ở cột ẩn cuối
         self._edit_vocabulary(vocab_id)
     
     def _on_list_button_press(self, widget, event):
@@ -449,7 +603,7 @@ class VocabularyWindow:
         """Chỉnh sửa từ vựng từ path"""
         model = self.vocabulary_list.get_model()
         iter = model.get_iter(path)
-        vocab_id = model.get_value(iter, 6)
+        vocab_id = model.get_value(iter, 9)
         self._edit_vocabulary(vocab_id)
     
     def _delete_vocabulary_from_path(self, path):
@@ -457,7 +611,7 @@ class VocabularyWindow:
         try:
             model = self.vocabulary_list.get_model()
             iter = model.get_iter(path)
-            vocab_id = model.get_value(iter, 6)
+            vocab_id = model.get_value(iter, 9)
             word = model.get_value(iter, 0)
             
             # Debug logging
@@ -505,7 +659,7 @@ class VocabularyWindow:
         """Đánh dấu đã ôn từ path"""
         model = self.vocabulary_list.get_model()
         iter = model.get_iter(path)
-        vocab_id = model.get_value(iter, 6)
+        vocab_id = model.get_value(iter, 9)
         word = model.get_value(iter, 0)
         
         if self.vocab_manager.mark_as_reviewed(vocab_id):
@@ -544,35 +698,55 @@ class VocabularyWindow:
         ex_buffer = self.example_textview.get_buffer()
         ex_buffer.set_text(vocab['example'] or "")
         
+        # Set context sentences
+        context_buffer = self.context_sentences_textview.get_buffer()
+        context_buffer.set_text(vocab['context_sentences'] or "")
+        
+        # Set synonyms and antonyms
+        self.synonyms_entry.set_text(vocab['synonyms'] or "")
+        self.antonyms_entry.set_text(vocab['antonyms'] or "")
+        
         # Chuyển sang edit mode
         self.current_editing_id = vocab_id
-        self.save_button.set_label("💾 Cập nhật")
-        self.cancel_button.set_no_show_all(False)
-        self.cancel_button.show()
+        self._update_edit_mode()
         
         # Focus vào word entry
         self.word_entry.grab_focus()
-    
+        log_message(f"Bắt đầu chỉnh sửa từ vựng: {vocab['word']}")
+
     def _cancel_edit_mode(self):
         """Hủy chế độ chỉnh sửa"""
         self.current_editing_id = None
-        self.save_button.set_label("💾 Lưu")
-        self.cancel_button.hide()
-        self._clear_form()
+        self._update_edit_mode()
     
     def _clear_form(self):
-        """Xóa form nhập liệu"""
+        """Xóa form"""
         self.word_entry.set_text("")
         self.pronunciation_entry.set_text("")
         self.part_of_speech_combo.set_active(0)
         
+        # Clear textviews
         def_buffer = self.definition_textview.get_buffer()
-        def_buffer.set_text("Nhập định nghĩa...")
+        def_buffer.set_text("")
         
         ex_buffer = self.example_textview.get_buffer()
-        ex_buffer.set_text("Nhập ví dụ sử dụng...")
+        ex_buffer.set_text("")
         
+        context_buffer = self.context_sentences_textview.get_buffer()
+        context_buffer.set_text("")
+        
+        # Clear entries
+        self.synonyms_entry.set_text("")
+        self.antonyms_entry.set_text("")
+        
+        # Focus vào word entry
         self.word_entry.grab_focus()
+
+    def _update_edit_mode(self):
+        """Cập nhật giao diện khi vào chế độ chỉnh sửa"""
+        self.save_button.set_label("💾 Cập nhật")
+        self.cancel_edit_button.set_visible(True)
+        self.cancel_edit_button.show()
     
     def _populate_list(self, vocabularies):
         """Điền dữ liệu vào danh sách"""
@@ -598,12 +772,21 @@ class VocabularyWindow:
                 log_message(f"ERROR: Invalid ID value for vocabulary {vocab.get('word', 'unknown')}: {vocab_id}")
                 continue
             
+            # Truncate long text for display
+            def truncate_text(text, max_length=50):
+                if not text:
+                    return ""
+                return text[:max_length] + "..." if len(text) > max_length else text
+            
             self.list_store.append([
                 vocab['word'] or "",
                 vocab['pronunciation'] or "",
                 vocab['part_of_speech'] or "",
-                vocab['definition'] or "",
-                vocab['example'] or "",
+                truncate_text(vocab['definition'] or ""),
+                truncate_text(vocab['example'] or ""),
+                truncate_text(vocab['context_sentences'] or ""),
+                truncate_text(vocab['synonyms'] or ""),
+                truncate_text(vocab['antonyms'] or ""),
                 created_at,
                 vocab_id  # Cột ẩn chứa ID (đã validate)
             ])

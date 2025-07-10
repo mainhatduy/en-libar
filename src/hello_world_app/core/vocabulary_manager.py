@@ -27,7 +27,7 @@ class VocabularyManager:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            # Tạo bảng vocabulary
+            # Tạo bảng vocabulary với các trường mới
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS vocabulary (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -36,11 +36,33 @@ class VocabularyManager:
                     example TEXT,
                     pronunciation TEXT,
                     part_of_speech TEXT,
+                    context_sentences TEXT,
+                    synonyms TEXT,
+                    antonyms TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_reviewed TIMESTAMP,
                     review_count INTEGER DEFAULT 0
                 )
             ''')
+            
+            # Thêm các cột mới vào bảng hiện có nếu chưa tồn tại
+            try:
+                cursor.execute('ALTER TABLE vocabulary ADD COLUMN context_sentences TEXT')
+                log_message("Đã thêm cột context_sentences")
+            except sqlite3.OperationalError:
+                pass  # Cột đã tồn tại
+            
+            try:
+                cursor.execute('ALTER TABLE vocabulary ADD COLUMN synonyms TEXT')
+                log_message("Đã thêm cột synonyms")
+            except sqlite3.OperationalError:
+                pass  # Cột đã tồn tại
+                
+            try:
+                cursor.execute('ALTER TABLE vocabulary ADD COLUMN antonyms TEXT')
+                log_message("Đã thêm cột antonyms")
+            except sqlite3.OperationalError:
+                pass  # Cột đã tồn tại
             
             conn.commit()
             conn.close()
@@ -50,17 +72,20 @@ class VocabularyManager:
             log_message(f"Lỗi khởi tạo database: {e}", "ERROR")
     
     def add_vocabulary(self, word: str, definition: str, example: str = "", 
-                      pronunciation: str = "", part_of_speech: str = "") -> bool:
-        """Thêm từ vựng mới"""
+                      pronunciation: str = "", part_of_speech: str = "",
+                      context_sentences: str = "", synonyms: str = "", antonyms: str = "") -> bool:
+        """Thêm từ vựng mới với tất cả các trường"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
             cursor.execute('''
-                INSERT INTO vocabulary (word, definition, example, pronunciation, part_of_speech)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO vocabulary (word, definition, example, pronunciation, part_of_speech, 
+                                      context_sentences, synonyms, antonyms)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ''', (word.strip(), definition.strip(), example.strip(), 
-                  pronunciation.strip(), part_of_speech.strip()))
+                  pronunciation.strip(), part_of_speech.strip(),
+                  context_sentences.strip(), synonyms.strip(), antonyms.strip()))
             
             conn.commit()
             conn.close()
@@ -76,8 +101,9 @@ class VocabularyManager:
     
     def update_vocabulary(self, vocab_id: int, word: str, definition: str, 
                          example: str = "", pronunciation: str = "", 
-                         part_of_speech: str = "") -> bool:
-        """Cập nhật từ vựng"""
+                         part_of_speech: str = "", context_sentences: str = "",
+                         synonyms: str = "", antonyms: str = "") -> bool:
+        """Cập nhật từ vựng với tất cả các trường"""
         try:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
@@ -85,10 +111,12 @@ class VocabularyManager:
             cursor.execute('''
                 UPDATE vocabulary 
                 SET word = ?, definition = ?, example = ?, 
-                    pronunciation = ?, part_of_speech = ?
+                    pronunciation = ?, part_of_speech = ?, context_sentences = ?,
+                    synonyms = ?, antonyms = ?
                 WHERE id = ?
             ''', (word.strip(), definition.strip(), example.strip(),
-                  pronunciation.strip(), part_of_speech.strip(), vocab_id))
+                  pronunciation.strip(), part_of_speech.strip(), context_sentences.strip(),
+                  synonyms.strip(), antonyms.strip(), vocab_id))
             
             conn.commit()
             conn.close()
@@ -124,7 +152,8 @@ class VocabularyManager:
             
             cursor.execute('''
                 SELECT id, word, definition, example, pronunciation, 
-                       part_of_speech, created_at, last_reviewed, review_count
+                       part_of_speech, context_sentences, synonyms, antonyms,
+                       created_at, last_reviewed, review_count
                 FROM vocabulary 
                 ORDER BY created_at DESC
             ''')
@@ -141,9 +170,12 @@ class VocabularyManager:
                     'example': row[3],
                     'pronunciation': row[4],
                     'part_of_speech': row[5],
-                    'created_at': row[6],
-                    'last_reviewed': row[7],
-                    'review_count': row[8]
+                    'context_sentences': row[6],
+                    'synonyms': row[7],
+                    'antonyms': row[8],
+                    'created_at': row[9],
+                    'last_reviewed': row[10],
+                    'review_count': row[11]
                 })
             
             return vocabularies
@@ -161,11 +193,14 @@ class VocabularyManager:
             search_pattern = f"%{search_term.strip()}%"
             cursor.execute('''
                 SELECT id, word, definition, example, pronunciation, 
-                       part_of_speech, created_at, last_reviewed, review_count
+                       part_of_speech, context_sentences, synonyms, antonyms,
+                       created_at, last_reviewed, review_count
                 FROM vocabulary 
-                WHERE word LIKE ? OR definition LIKE ? OR example LIKE ?
+                WHERE word LIKE ? OR definition LIKE ? OR example LIKE ? 
+                   OR context_sentences LIKE ? OR synonyms LIKE ? OR antonyms LIKE ?
                 ORDER BY created_at DESC
-            ''', (search_pattern, search_pattern, search_pattern))
+            ''', (search_pattern, search_pattern, search_pattern, 
+                  search_pattern, search_pattern, search_pattern))
             
             rows = cursor.fetchall()
             conn.close()
@@ -179,9 +214,12 @@ class VocabularyManager:
                     'example': row[3],
                     'pronunciation': row[4],
                     'part_of_speech': row[5],
-                    'created_at': row[6],
-                    'last_reviewed': row[7],
-                    'review_count': row[8]
+                    'context_sentences': row[6],
+                    'synonyms': row[7],
+                    'antonyms': row[8],
+                    'created_at': row[9],
+                    'last_reviewed': row[10],
+                    'review_count': row[11]
                 })
             
             return vocabularies
@@ -262,7 +300,8 @@ class VocabularyManager:
             
             cursor.execute('''
                 SELECT id, word, definition, example, pronunciation, 
-                       part_of_speech, created_at, last_reviewed, review_count
+                       part_of_speech, context_sentences, synonyms, antonyms,
+                       created_at, last_reviewed, review_count
                 FROM vocabulary 
                 ORDER BY RANDOM()
                 LIMIT ?
@@ -280,9 +319,12 @@ class VocabularyManager:
                     'example': row[3],
                     'pronunciation': row[4],
                     'part_of_speech': row[5],
-                    'created_at': row[6],
-                    'last_reviewed': row[7],
-                    'review_count': row[8]
+                    'context_sentences': row[6],
+                    'synonyms': row[7],
+                    'antonyms': row[8],
+                    'created_at': row[9],
+                    'last_reviewed': row[10],
+                    'review_count': row[11]
                 })
             
             return vocabularies
