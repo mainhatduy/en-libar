@@ -286,12 +286,45 @@ class MainWindow:
     def show(self):
         """Hiển thị cửa sổ"""
         if self.window:
+            # Đảm bảo cửa sổ hiển thị
             self.window.show_all()
+            
+            # Đặt cửa sổ lên trên tất cả các cửa sổ khác
+            self.window.set_keep_above(True)
+            
+            # Present để focus và đưa cửa sổ lên đầu
             self.window.present()
+            
+            # Đảm bảo cửa sổ có thể nhận input
+            self.window.set_can_focus(True)
+            
+            # Grab focus cho cửa sổ
+            self.window.grab_focus()
+            
+            # Unmap và map lại để force refresh (workaround cho một số DE)
+            if not self.window.get_visible():
+                self.window.deiconify()
+            
+            # Tắt keep_above sau một chút để không ảnh hưởng UX
+            GLib.timeout_add_seconds(1, lambda: self._disable_keep_above())
+            
             # Focus vào word entry để sẵn sàng nhập từ vựng
             if self.word_entry:
-                self.word_entry.grab_focus()
+                GLib.timeout_add(100, self._delayed_focus_word_entry)
+            
             log_message("Hiển thị cửa sổ chính")
+    
+    def _disable_keep_above(self):
+        """Tắt keep_above sau khi cửa sổ đã hiển thị"""
+        if self.window:
+            self.window.set_keep_above(False)
+        return False  # Chỉ chạy một lần
+    
+    def _delayed_focus_word_entry(self):
+        """Focus vào word entry sau một delay ngắn"""
+        if self.word_entry:
+            self.word_entry.grab_focus()
+        return False  # Chỉ chạy một lần
     
     def hide(self):
         """Ẩn cửa sổ"""

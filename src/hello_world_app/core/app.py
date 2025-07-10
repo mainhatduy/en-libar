@@ -93,10 +93,41 @@ class HelloWorldApp:
     def show_window(self):
         """Hiển thị cửa sổ chính"""
         if self.main_window:
+            # Log để debug
+            log_message("Hiển thị cửa sổ từ hotkey hoặc signal")
+            
+            # Gọi show() method đã được cải thiện
             self.main_window.show()
-            # Đảm bảo cửa sổ lên foreground
+            
+            # Đảm bảo cửa sổ lên foreground với một số workaround
             if hasattr(self.main_window, 'window') and self.main_window.window:
-                self.main_window.window.present()
+                window = self.main_window.window
+                
+                # Deiconify nếu cửa sổ bị minimize
+                window.deiconify()
+                
+                # Present cửa sổ
+                window.present()
+                
+                # Đảm bảo cửa sổ visible và có focus
+                window.show()
+                window.set_focus(None)  # Clear current focus
+                
+                # Delay một chút rồi grab focus lại
+                GLib.timeout_add(50, lambda: self._ensure_window_focus(window))
+    
+    def _ensure_window_focus(self, window):
+        """Đảm bảo cửa sổ có focus và hiển thị đúng cách"""
+        try:
+            if window and window.get_visible():
+                # Present lần nữa để đảm bảo
+                window.present()
+                # Set focus cho window
+                window.grab_focus()
+                log_message("Đã đảm bảo focus cho cửa sổ")
+        except Exception as e:
+            log_message(f"Lỗi khi ensure window focus: {e}", "WARNING")
+        return False  # Chỉ chạy một lần
     
     def hide_window(self):
         """Ẩn cửa sổ chính"""
